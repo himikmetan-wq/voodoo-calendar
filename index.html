@@ -18,6 +18,7 @@
     --accent:#e6b23c; --accent-soft:rgba(230,178,60,.14); --accent-soft-2:rgba(230,178,60,.07);
     --text:#f5f5f0; --text-muted:#9a9a94; --border:rgba(245,245,240,.09); --border-strong:rgba(245,245,240,.16);
     --free-neon:#f4ff2e; --free-neon-glow:rgba(244,255,46,.45); --busy-bg:rgba(245,245,240,.06);
+    --personal:#7ad1e6;
   }
   *{box-sizing:border-box;}
   html{background:var(--bg);}
@@ -28,6 +29,7 @@
   .brand-left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
   .brand-mark{font-family:'Russo One',sans-serif;font-size:28px;letter-spacing:.5px;color:var(--accent);}
   .brand-sub{font-size:13px;color:var(--text-muted);}
+  .mode-buttons{display:flex;gap:8px;flex-wrap:wrap;}
   .mode-btn{padding:8px 12px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
   .mode-btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 
@@ -59,6 +61,10 @@
   .entry-client{font-weight:600;}
   .entry-price{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--text);font-weight:600;}
   .entry-sub{font-size:12px;color:var(--text-muted);margin-top:2px;word-break:break-word;}
+  .entry-personal{border-left-color:var(--personal);}
+  .entry-personal .entry-time{color:var(--personal);}
+  .entry-personal:not([onclick]):hover{background:none;cursor:default;}
+  .entry-readonly{font-size:14px;color:var(--text-muted);padding:4px 0 4px 10px;border-left:3px solid var(--border-strong);}
   .day-add-btn{font:inherit;font-size:13px;color:var(--accent);background:none;border:1px dashed var(--border-strong);border-radius:8px;padding:7px 10px;cursor:pointer;text-align:left;width:fit-content;}
   .day-empty-btn{font:inherit;font-size:14px;font-weight:700;letter-spacing:.2px;color:#1a1206;background:var(--free-neon);border:1px solid var(--free-neon);border-radius:8px;padding:8px 12px;cursor:pointer;text-align:left;width:fit-content;box-shadow:0 0 14px var(--free-neon-glow),0 0 2px rgba(244,255,46,.9);}
   .day-status{font-size:13px;color:var(--text-muted);padding:8px 0;}
@@ -96,7 +102,10 @@
         <span class="brand-mark">VOODOO</span>
         <span class="brand-sub" id="brandSub">Свободные даты записи</span>
       </div>
-      <button class="mode-btn" id="modeBtn" onclick="onModeBtnClick()">Войти как мастер</button>
+      <div class="mode-buttons">
+        <button class="mode-btn" id="masterBtn" onclick="onMasterBtnClick()">Войти как мастер</button>
+        <button class="mode-btn" id="secBtn" onclick="onSecBtnClick()">Секретарь</button>
+      </div>
     </div>
     <div class="month-tabs" id="monthTabs"></div>
     <div class="month-summary" id="monthSummary" hidden></div>
@@ -121,7 +130,7 @@
 
 <div class="modal-overlay" id="pinModal" hidden>
   <div class="modal-box">
-    <h3>Режим мастера</h3>
+    <h3 id="pinModalTitle">Режим мастера</h3>
     <label>Пинкод<input type="password" inputmode="numeric" id="pinInput" placeholder="••••"></label>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closePinModal()">Отмена</button>
@@ -155,6 +164,22 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="secModal" hidden>
+  <div class="modal-box">
+    <h3 id="secModalTitle">Новое личное событие</h3>
+    <label>Дата<input type="date" id="sDate"></label>
+    <label>Время<input type="time" id="sTime"></label>
+    <label>Что<input type="text" id="sTitle" placeholder="Например: Врач"></label>
+    <label>Продолжительность, ч<input type="number" id="sDuration" step="0.5" min="0" placeholder="1"></label>
+    <label>Комментарий<textarea id="sComment" rows="2" placeholder="Заметки"></textarea></label>
+    <div class="modal-actions">
+      <button class="btn-danger" id="secModalDelete" onclick="deleteSecEntry()" hidden>Удалить</button>
+      <button class="btn-ghost" onclick="closeSecModal()">Отмена</button>
+      <button class="btn-accent" onclick="saveSecEntry()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script>
@@ -164,13 +189,18 @@
   const DOW = ["ВС","ПН","ВТ","СР","ЧТ","ПТ","СБ"];
   const SOURCE_SUFFIX = {VK:"ВК",TG:"Т",WA:"W",MAX:"М"};
 
-  let pin = localStorage.getItem('voodoo_pin') || null;
-  let bookings = []; // full rows in master mode, or [] with busyDates in public mode
-  let busyDates = new Set();
+  let masterPin = localStorage.getItem('voodoo_pin') || null;
+  let secretaryPin = localStorage.getItem('voodoo_sec_pin') || null;
+  let mode = 'public'; // 'public' | 'master' | 'secretary'
+  let bookings = []; // full rows in master mode
+  let secRows = []; // rows in secretary mode
+  let busyDates = new Set(); // public mode
   let today = new Date();
   let activeYear = today.getFullYear();
   let activeMonth = today.getMonth() + 1;
   let editingId = null;
+  let secEditingId = null;
+  let pinModalKind = 'master';
   let modalOpen = false;
   let toastTimer = null;
   let refreshTimer = null;
@@ -202,11 +232,14 @@
   }
 
   async function loadMaster(){
-    const rows = await rpc('master_list_bookings', {p_pin: pin});
+    const rows = await rpc('master_list_bookings', {p_pin: masterPin});
     bookings = rows || [];
   }
 
-  function isMaster(){ return !!pin; }
+  async function loadSecretary(){
+    const rows = await rpc('secretary_list_bookings', {p_pin: secretaryPin});
+    secRows = rows || [];
+  }
 
   function fmtMoney(n){ return Math.round(n||0).toLocaleString('ru-RU') + ' ₽'; }
   function pad(n){ return String(n).padStart(2,'0'); }
@@ -244,17 +277,18 @@
 
   function renderSummary(){
     const summaryEl = document.getElementById('monthSummary');
-    if (!isMaster()){ summaryEl.hidden = true; return; }
+    if (mode !== 'master'){ summaryEl.hidden = true; return; }
     summaryEl.hidden = false;
     const monthBookings = bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`);
-    const total = monthBookings.reduce((s,b) => s + (Number(b.price)||0), 0);
+    const clientBookings = monthBookings.filter(b => !b.is_personal);
+    const total = clientBookings.reduce((s,b) => s + (Number(b.price)||0), 0);
     const bookedDays = new Set(monthBookings.map(b => b.booking_date)).size;
     const nDays = daysInMonth(activeYear, activeMonth);
-    const avgSession = monthBookings.length ? total/monthBookings.length : 0;
+    const avgSession = clientBookings.length ? total/clientBookings.length : 0;
     const avgDay = total / nDays;
     summaryEl.innerHTML = `
       <div class="stat"><span>Занято дней</span><b>${bookedDays} из ${nDays}</b></div>
-      <div class="stat"><span>Сеансов</span><b>${monthBookings.length}</b></div>
+      <div class="stat"><span>Сеансов</span><b>${clientBookings.length}</b></div>
       <div class="stat"><span>Сумма по записям</span><b>${fmtMoney(total)}</b></div>
       <div class="stat"><span>Средний чек</span><b>${fmtMoney(avgSession)}</b></div>
       <div class="stat"><span>Среднее в календарный день</span><b>${fmtMoney(avgDay)}</b></div>
@@ -265,26 +299,47 @@
     const list = document.getElementById('dayList');
     list.innerHTML = '';
     const nDays = daysInMonth(activeYear, activeMonth);
-    const master = isMaster();
-    const monthBookings = master ? bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`) : [];
+    const monthKey = `${activeYear}-${pad(activeMonth)}`;
+    const monthBookings = mode==='master' ? bookings.filter(b => b.booking_date.slice(0,7) === monthKey) : [];
+    const monthSecRows = mode==='secretary' ? secRows.filter(r => r.booking_date.slice(0,7) === monthKey) : [];
 
     for (let d=1; d<=nDays; d++){
       const dow = weekday(activeYear, activeMonth, d);
       const weekend = dow===0 || dow===6;
       const ds = dateStr(activeYear, activeMonth, d);
-      const dayEntries = master ? monthBookings.filter(b => b.booking_date === ds).sort((a,b)=> (a.start_time||'').localeCompare(b.start_time||'')) : [];
-      const busy = master ? dayEntries.length>0 : busyDates.has(ds);
+
+      let dayEntries = [];
+      let busy = false;
+      if (mode==='master'){
+        dayEntries = monthBookings.filter(b => b.booking_date === ds).sort((a,b)=> (a.start_time||'').localeCompare(b.start_time||''));
+        busy = dayEntries.length>0;
+      } else if (mode==='secretary'){
+        dayEntries = monthSecRows.filter(r => r.booking_date === ds).sort((a,b)=> (a.start_time||'').localeCompare(b.start_time||''));
+        busy = dayEntries.length>0;
+      } else {
+        busy = busyDates.has(ds);
+      }
 
       const row = document.createElement('div');
       row.className = 'day-row' + (weekend?' weekend':'') + (isToday(activeYear,activeMonth,d)?' today':'') + (!busy?' free':'');
 
       let inner = `<div class="day-date"><span class="day-num">${d}</span><span class="day-dow">${DOW[dow]}</span></div>`;
 
-      if (master){
+      if (mode==='master'){
         if (dayEntries.length===0){
           inner += `<button class="day-empty-btn" onclick="openEntryModal(null,'${ds}')">Свободно <span>+</span></button>`;
         } else {
           inner += '<div class="day-entries">' + dayEntries.map(b => {
+            if (b.is_personal){
+              return `<div class="entry entry-personal">
+                <div class="entry-main">
+                  <span class="entry-time">${b.start_time||''}</span>
+                  <span class="entry-client">🏠 ${escapeHtml(b.client_name||'Личное')}</span>
+                  ${b.duration_hours!=null ? `<span class="entry-price">${b.duration_hours} ч</span>` : ''}
+                </div>
+                ${b.notes ? `<div class="entry-sub">${escapeHtml(b.notes)}</div>` : ''}
+              </div>`;
+            }
             const suffix = SOURCE_SUFFIX[b.source] || (b.source||'');
             const sub = [b.notes, b.phone].filter(Boolean).join(' · ');
             return `<div class="entry" onclick="openEntryModal('${b.id}', null)">
@@ -296,6 +351,24 @@
               ${sub ? `<div class="entry-sub">${escapeHtml(sub)}</div>` : ''}
             </div>`;
           }).join('') + `<button class="day-add-btn" onclick="openEntryModal(null,'${ds}')">+ Добавить запись</button></div>`;
+        }
+      } else if (mode==='secretary'){
+        if (dayEntries.length===0){
+          inner += `<button class="day-empty-btn" onclick="openSecModal(null,'${ds}')">Свободно <span>+</span></button>`;
+        } else {
+          inner += '<div class="day-entries">' + dayEntries.map(r => {
+            if (r.is_personal){
+              return `<div class="entry entry-personal" onclick="openSecModal('${r.id}', null)">
+                <div class="entry-main">
+                  <span class="entry-time">${r.start_time||''}</span>
+                  <span class="entry-client">🏠 ${escapeHtml(r.title||'Личное')}</span>
+                  ${r.duration_hours!=null ? `<span class="entry-price">${r.duration_hours} ч</span>` : ''}
+                </div>
+                ${r.notes ? `<div class="entry-sub">${escapeHtml(r.notes)}</div>` : ''}
+              </div>`;
+            }
+            return `<div class="entry-readonly"><span class="entry-time">${r.start_time||''}</span> занято${r.duration_hours!=null ? ' · '+r.duration_hours+' ч' : ''}</div>`;
+          }).join('') + `<button class="day-add-btn" onclick="openSecModal(null,'${ds}')">+ Добавить</button></div>`;
         }
       } else {
         inner += busy
@@ -316,23 +389,56 @@
     renderMonthTabs();
     renderSummary();
     renderDayList();
-    document.getElementById('brandSub').textContent = isMaster() ? 'Режим мастера — полная сводка' : 'Свободные даты записи';
-    document.getElementById('modeBtn').textContent = isMaster() ? 'Выйти из режима мастера' : 'Войти как мастер';
-    document.getElementById('modeBtn').classList.toggle('on', isMaster());
-    document.getElementById('ctaBlock').hidden = isMaster();
+    const subText = mode==='master' ? 'Режим мастера — полная сводка' : (mode==='secretary' ? 'Режим секретаря' : 'Свободные даты записи');
+    document.getElementById('brandSub').textContent = subText;
+    document.getElementById('masterBtn').textContent = mode==='master' ? 'Выйти из режима мастера' : 'Войти как мастер';
+    document.getElementById('masterBtn').classList.toggle('on', mode==='master');
+    document.getElementById('secBtn').textContent = mode==='secretary' ? 'Выйти из режима секретаря' : 'Секретарь';
+    document.getElementById('secBtn').classList.toggle('on', mode==='secretary');
+    document.getElementById('ctaBlock').hidden = mode!=='public';
   }
 
-  function onModeBtnClick(){
-    if (isMaster()){
-      pin = null;
+  function onMasterBtnClick(){
+    if (mode === 'master'){
+      masterPin = null;
       localStorage.removeItem('voodoo_pin');
+      mode = 'public';
       loadPublic().then(renderAll).catch(e => showToast('Ошибка: ' + e.message));
+      return;
+    }
+    if (masterPin){
+      rpc('master_list_bookings', {p_pin: masterPin}).then(rows => {
+        bookings = rows || []; mode = 'master'; renderAll();
+      }).catch(() => {
+        masterPin = null; localStorage.removeItem('voodoo_pin'); openPinModal('master');
+      });
     } else {
-      openPinModal();
+      openPinModal('master');
     }
   }
 
-  function openPinModal(){
+  function onSecBtnClick(){
+    if (mode === 'secretary'){
+      secretaryPin = null;
+      localStorage.removeItem('voodoo_sec_pin');
+      mode = 'public';
+      loadPublic().then(renderAll).catch(e => showToast('Ошибка: ' + e.message));
+      return;
+    }
+    if (secretaryPin){
+      rpc('secretary_list_bookings', {p_pin: secretaryPin}).then(rows => {
+        secRows = rows || []; mode = 'secretary'; renderAll();
+      }).catch(() => {
+        secretaryPin = null; localStorage.removeItem('voodoo_sec_pin'); openPinModal('secretary');
+      });
+    } else {
+      openPinModal('secretary');
+    }
+  }
+
+  function openPinModal(kind){
+    pinModalKind = kind;
+    document.getElementById('pinModalTitle').textContent = kind==='master' ? 'Режим мастера' : 'Режим секретаря';
     document.getElementById('pinInput').value = '';
     document.getElementById('pinModal').hidden = false;
     modalOpen = true;
@@ -344,10 +450,19 @@
     const val = document.getElementById('pinInput').value.trim();
     if (!val){ return; }
     try {
-      const rows = await rpc('master_list_bookings', {p_pin: val});
-      pin = val;
-      localStorage.setItem('voodoo_pin', val);
-      bookings = rows || [];
+      if (pinModalKind === 'master'){
+        const rows = await rpc('master_list_bookings', {p_pin: val});
+        masterPin = val;
+        localStorage.setItem('voodoo_pin', val);
+        bookings = rows || [];
+        mode = 'master';
+      } else {
+        const rows = await rpc('secretary_list_bookings', {p_pin: val});
+        secretaryPin = val;
+        localStorage.setItem('voodoo_sec_pin', val);
+        secRows = rows || [];
+        mode = 'secretary';
+      }
       closePinModal();
       renderAll();
       showToast('Вход выполнен');
@@ -385,7 +500,7 @@
     if (!bDate || !time || !client){ showToast('Заполни дату, время и имя клиента.'); return; }
     try {
       await rpc('master_upsert_booking', {
-        p_pin: pin, p_id: editingId, p_booking_date: bDate, p_start_time: time,
+        p_pin: masterPin, p_id: editingId, p_booking_date: bDate, p_start_time: time,
         p_client_name: client, p_phone: phone || null, p_source: source,
         p_service: null, p_price: price, p_status: 'booked', p_notes: comment || null
       });
@@ -399,9 +514,55 @@
   async function deleteModalEntry(){
     if (!editingId) return;
     try {
-      await rpc('master_delete_booking', {p_pin: pin, p_id: editingId});
+      await rpc('master_delete_booking', {p_pin: masterPin, p_id: editingId});
       closeEntryModal();
       await loadMaster();
+      renderAll();
+      showToast('Удалено');
+    } catch(e){ showToast('Ошибка удаления: ' + e.message); }
+  }
+
+  function openSecModal(id, prefillDate){
+    secEditingId = id || null;
+    const entry = id ? secRows.find(r => r.id === id) : null;
+    document.getElementById('sDate').value = entry ? entry.booking_date : (prefillDate || dateStr(activeYear,activeMonth,1));
+    document.getElementById('sTime').value = entry ? (entry.start_time||'12:00') : '12:00';
+    document.getElementById('sTitle').value = entry ? (entry.title||'') : '';
+    document.getElementById('sDuration').value = entry && entry.duration_hours!=null ? entry.duration_hours : '';
+    document.getElementById('sComment').value = entry ? (entry.notes||'') : '';
+    document.getElementById('secModalTitle').textContent = entry ? 'Изменить событие' : 'Новое личное событие';
+    document.getElementById('secModalDelete').hidden = !entry;
+    document.getElementById('secModal').hidden = false;
+    modalOpen = true;
+  }
+  function closeSecModal(){ document.getElementById('secModal').hidden = true; modalOpen = false; secEditingId = null; }
+
+  async function saveSecEntry(){
+    const bDate = document.getElementById('sDate').value;
+    const time = document.getElementById('sTime').value.trim();
+    const title = document.getElementById('sTitle').value.trim();
+    const durRaw = document.getElementById('sDuration').value;
+    const duration = durRaw === '' ? null : parseFloat(durRaw);
+    const comment = document.getElementById('sComment').value.trim();
+    if (!bDate || !time || !title){ showToast('Заполни дату, время и что за событие.'); return; }
+    try {
+      await rpc('secretary_upsert_personal_block', {
+        p_pin: secretaryPin, p_id: secEditingId, p_booking_date: bDate, p_start_time: time,
+        p_duration_hours: duration, p_title: title, p_notes: comment || null
+      });
+      closeSecModal();
+      await loadSecretary();
+      renderAll();
+      showToast('Сохранено ✓');
+    } catch(e){ showToast('Ошибка сохранения: ' + e.message); }
+  }
+
+  async function deleteSecEntry(){
+    if (!secEditingId) return;
+    try {
+      await rpc('secretary_delete_personal_block', {p_pin: secretaryPin, p_id: secEditingId});
+      closeSecModal();
+      await loadSecretary();
       renderAll();
       showToast('Удалено');
     } catch(e){ showToast('Ошибка удаления: ' + e.message); }
@@ -410,7 +571,9 @@
   async function refreshLoop(){
     if (!modalOpen){
       try {
-        if (isMaster()) await loadMaster(); else await loadPublic();
+        if (mode==='master') await loadMaster();
+        else if (mode==='secretary') await loadSecretary();
+        else await loadPublic();
         renderAll();
       } catch(e){ /* silent */ }
     }
@@ -419,10 +582,14 @@
 
   async function init(){
     try {
-      if (isMaster()){
-        try { await loadMaster(); } catch(e){ pin = null; localStorage.removeItem('voodoo_pin'); await loadPublic(); }
+      if (masterPin){
+        try { await loadMaster(); mode = 'master'; }
+        catch(e){ masterPin = null; localStorage.removeItem('voodoo_pin'); await loadPublic(); mode = 'public'; }
+      } else if (secretaryPin){
+        try { await loadSecretary(); mode = 'secretary'; }
+        catch(e){ secretaryPin = null; localStorage.removeItem('voodoo_sec_pin'); await loadPublic(); mode = 'public'; }
       } else {
-        await loadPublic();
+        await loadPublic(); mode = 'public';
       }
     } catch(e){ showToast('Не удалось загрузить расписание'); }
     renderAll();
