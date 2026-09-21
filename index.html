@@ -3,135 +3,428 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>VOODOO — свободные даты записи</title>
-<meta name="description" content="Тату-студия VOODOO, Красноярск. Свободные даты для записи и контакты.">
+<title>VOODOO Расписание</title>
+<meta name="description" content="Тату-студия VOODOO, Красноярск. Живое расписание записи.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Golos+Text:wght@400;500;600;700&display=swap">
 <style>
   :root{
-    --bg:#0a0a0a;
-    --surface:#141210;
-    --surface-2:#1d1a15;
-    --accent:#e6b23c;
-    --accent-soft:rgba(230,178,60,.14);
-    --text:#f5f5f0;
-    --text-muted:#9a9a94;
-    --border:rgba(245,245,240,.09);
-    --border-strong:rgba(245,245,240,.16);
-    --free-neon:#f4ff2e;
-    --free-neon-glow:rgba(244,255,46,.45);
-    --busy-bg:rgba(245,245,240,.06);
+    --bg:#0a0a0a; --surface:#141210; --surface-2:#1d1a15; --surface-3:#242019;
+    --accent:#e6b23c; --accent-soft:rgba(230,178,60,.14); --accent-soft-2:rgba(230,178,60,.07);
+    --text:#f5f5f0; --text-muted:#9a9a94; --border:rgba(245,245,240,.09); --border-strong:rgba(245,245,240,.16);
+    --free-neon:#f4ff2e; --free-neon-glow:rgba(244,255,46,.45); --busy-bg:rgba(245,245,240,.06);
   }
   *{box-sizing:border-box;}
   html{background:var(--bg);}
-  body{
-    margin:0;
-    background:var(--bg);
-    color:var(--text);
-    font-family:'Golos Text', system-ui, -apple-system, sans-serif;
-    padding-inline:16px;
-    padding-block:24px 40px;
-  }
-  .page{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:22px;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Golos Text',system-ui,-apple-system,sans-serif;padding-inline:16px;padding-block:20px 40px;}
+  .page{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}
+  .topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid var(--border);}
+  .brand{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .brand-left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .brand-mark{font-family:'Russo One',sans-serif;font-size:28px;letter-spacing:.5px;color:var(--accent);}
+  .brand-sub{font-size:13px;color:var(--text-muted);}
+  .mode-btn{padding:8px 12px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  .mode-btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 
-  header.top{display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center;padding-block:4px 8px;}
-  .brand-mark{font-family:'Russo One', sans-serif;font-size:34px;letter-spacing:1px;color:var(--accent);}
-  .brand-sub{font-size:14px;color:var(--text-muted);}
-  .intro{font-size:14px;color:var(--text-muted);text-align:center;max-width:520px;margin:0 auto;line-height:1.5;}
-  .intro b{color:var(--free-neon);}
+  .month-tabs{display:flex;gap:6px;overflow-x:auto;padding-block:2px 4px;scrollbar-width:thin;}
+  .month-tabs::-webkit-scrollbar{height:4px;}
+  .month-tabs::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px;}
+  .month-tab{flex:0 0 auto;padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .month-tab.active{background:var(--accent);border-color:var(--accent);color:#1a1206;}
 
-  .legend{display:flex;gap:22px;justify-content:center;font-size:13px;color:var(--text-muted);flex-wrap:wrap;}
-  .legend .dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:middle;}
-  .legend .dot.free{background:var(--free-neon);box-shadow:0 0 6px var(--free-neon-glow);}
-  .legend .dot.busy{background:var(--text-muted);}
+  .month-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:12px 14px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:13px;color:var(--text-muted);}
+  .month-summary b{color:var(--text);font-variant-numeric:tabular-nums;}
+  .month-summary .stat{display:flex;flex-direction:column;gap:2px;}
+  .month-summary .stat span:first-child{font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
 
-  .cal-wrap{display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:16px;}
-  .cal-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
-  .cal-title{font-family:'Russo One', sans-serif;font-size:16px;color:var(--accent);text-align:center;margin-bottom:10px;letter-spacing:.3px;}
-  .cal-head-row{display:grid;grid-template-columns:repeat(7,1fr);font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:6px;}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
-  .cal-day{
-    aspect-ratio:1;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:13px;
-    font-variant-numeric:tabular-nums;
-    border-radius:7px;
-  }
-  .cal-day.empty{visibility:hidden;}
-  .cal-day.weekend{color:var(--accent);}
-  .cal-day.free{
-    background:rgba(244,255,46,.20);
-    color:var(--free-neon);
-    font-weight:700;
-    box-shadow:0 0 6px rgba(244,255,46,.5);
-  }
-  .cal-day.busy{background:var(--busy-bg);color:var(--text-muted);}
-  .cal-day.past{background:transparent;color:var(--border-strong);}
-  .cal-day.today{box-shadow:0 0 0 2px var(--accent) inset;font-weight:700;}
-  .cal-day.today.free{box-shadow:0 0 0 2px var(--accent) inset, 0 0 6px rgba(244,255,46,.5);}
+  .day-list{display:flex;flex-direction:column;gap:6px;}
+  .day-row{display:flex;gap:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--surface);}
+  .day-row.weekend{background:var(--accent-soft-2);}
+  .day-row.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .day-row.free{border-color:rgba(244,255,46,.5);background:rgba(244,255,46,.06);box-shadow:0 0 16px rgba(244,255,46,.14);}
+  .day-date{flex:0 0 46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+  .day-num{font-family:'Russo One',sans-serif;font-size:20px;font-variant-numeric:tabular-nums;line-height:1;}
+  .day-dow{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+  .day-row.weekend .day-num{color:var(--accent);}
+  .day-entries{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .entry{border-left:3px solid var(--accent);padding:4px 0 4px 10px;cursor:pointer;border-radius:0 8px 8px 0;}
+  .entry:hover{background:var(--surface-2);}
+  .entry-main{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;font-size:14px;}
+  .entry-time{font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600;}
+  .entry-client{font-weight:600;}
+  .entry-price{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--text);font-weight:600;}
+  .entry-sub{font-size:12px;color:var(--text-muted);margin-top:2px;word-break:break-word;}
+  .day-add-btn{font:inherit;font-size:13px;color:var(--accent);background:none;border:1px dashed var(--border-strong);border-radius:8px;padding:7px 10px;cursor:pointer;text-align:left;width:fit-content;}
+  .day-empty-btn{font:inherit;font-size:14px;font-weight:700;letter-spacing:.2px;color:#1a1206;background:var(--free-neon);border:1px solid var(--free-neon);border-radius:8px;padding:8px 12px;cursor:pointer;text-align:left;width:fit-content;box-shadow:0 0 14px var(--free-neon-glow),0 0 2px rgba(244,255,46,.9);}
+  .day-status{font-size:13px;color:var(--text-muted);padding:8px 0;}
+  .day-status.free-label{color:var(--free-neon);font-weight:700;}
 
-  .cta{
-    display:flex;
-    flex-direction:column;
-    gap:12px;
-    align-items:center;
-    text-align:center;
-    padding:22px 18px;
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:16px;
-  }
-  .cta h2{font-family:'Russo One', sans-serif;font-size:18px;font-weight:400;color:var(--text);margin:0;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:16px;}
+  .modal-overlay[hidden]{display:none;}
+  .modal-box{background:var(--surface);border:1px solid var(--border-strong);border-radius:16px 16px 12px 12px;padding:18px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:10px;max-height:88vh;overflow-y:auto;}
+  .modal-box h3{font-family:'Russo One',sans-serif;font-size:16px;color:var(--accent);margin:0 0 4px;font-weight:400;}
+  .modal-box label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);}
+  .modal-box input,.modal-box select,.modal-box textarea{font:inherit;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;}
+  .modal-box textarea{resize:vertical;}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap;}
+  .btn-accent{padding:9px 14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#1a1206;font:inherit;font-weight:700;font-size:13px;cursor:pointer;}
+  .btn-ghost{padding:9px 14px;border-radius:10px;border:1px solid var(--border-strong);background:none;color:var(--text-muted);font:inherit;font-size:13px;cursor:pointer;}
+  .btn-danger{padding:9px 14px;border-radius:10px;border:1px solid #b5514a;background:none;color:#e07a72;font:inherit;font-size:13px;cursor:pointer;margin-right:auto;}
+
+  .cta{display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;padding:20px 18px;background:var(--surface);border:1px solid var(--border);border-radius:16px;}
+  .cta h2{font-family:'Russo One',sans-serif;font-size:17px;font-weight:400;color:var(--text);margin:0;}
   .cta p{font-size:13px;color:var(--text-muted);margin:0;max-width:440px;}
   .cta-buttons{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px;}
-  .btn{
-    padding:11px 18px;
-    border-radius:10px;
-    font:inherit;
-    font-weight:700;
-    font-size:14px;
-    text-decoration:none;
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-  }
-  .btn-accent{background:var(--accent);color:#1a1206;}
-  .btn-ghost{background:none;border:1px solid var(--border-strong);color:var(--text);}
+  .btn{padding:11px 18px;border-radius:10px;font:inherit;font-weight:700;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+  .btn-y{background:var(--accent);color:#1a1206;}
 
-  footer.note{font-size:12px;color:var(--text-muted);text-align:center;padding-block:6px 0;}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:90%;background:var(--surface-3);border:1px solid var(--accent);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;text-align:center;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.4);}
+  .toast[hidden]{display:none;}
+  .note{font-size:12px;color:var(--text-muted);text-align:center;padding-block:8px 4px;}
 </style>
 </head>
 <body>
 <div class="page">
-  <header class="top">
-    <span class="brand-mark">VOODOO</span>
-    <span class="brand-sub">Тату-студия · Красноярск, пр-т Свободный 40</span>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-left">
+        <span class="brand-mark">VOODOO</span>
+        <span class="brand-sub" id="brandSub">Свободные даты записи</span>
+      </div>
+      <button class="mode-btn" id="modeBtn" onclick="onModeBtnClick()">Войти как мастер</button>
+    </div>
+    <div class="month-tabs" id="monthTabs"></div>
+    <div class="month-summary" id="monthSummary" hidden></div>
   </header>
 
-  <p class="intro">Ниже — актуальные свободные даты. <b>Жёлтым</b> отмечены свободные дни, серым — занятые. Выбери удобный день и напиши мне, чтобы согласовать время и идею.</p>
+  <section>
+    <div class="day-list" id="dayList"></div>
+  </section>
 
-  <div class="legend">
-    <span><i class="dot free"></i>свободно</span>
-    <span><i class="dot busy"></i>занято</span>
-  </div>
-
-  <div class="cal-wrap">
-    <div class="cal-card"><div class="cal-title">Сентябрь</div><div class="cal-head-row"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div class="cal-grid"><span class="cal-day empty"></span><span class="cal-day past">1</span><span class="cal-day past">2</span><span class="cal-day past">3</span><span class="cal-day past">4</span><span class="cal-day weekend past">5</span><span class="cal-day weekend past">6</span><span class="cal-day past">7</span><span class="cal-day past">8</span><span class="cal-day past">9</span><span class="cal-day past">10</span><span class="cal-day past">11</span><span class="cal-day weekend past">12</span><span class="cal-day weekend past">13</span><span class="cal-day past">14</span><span class="cal-day past">15</span><span class="cal-day past">16</span><span class="cal-day past">17</span><span class="cal-day past">18</span><span class="cal-day weekend past">19</span><span class="cal-day weekend today busy">20</span><span class="cal-day busy">21</span><span class="cal-day free">22</span><span class="cal-day busy">23</span><span class="cal-day busy">24</span><span class="cal-day busy">25</span><span class="cal-day weekend free">26</span><span class="cal-day weekend busy">27</span><span class="cal-day busy">28</span><span class="cal-day busy">29</span><span class="cal-day free">30</span></div></div><div class="cal-card"><div class="cal-title">Октябрь</div><div class="cal-head-row"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div class="cal-grid"><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day free">1</span><span class="cal-day free">2</span><span class="cal-day weekend free">3</span><span class="cal-day weekend free">4</span><span class="cal-day free">5</span><span class="cal-day free">6</span><span class="cal-day free">7</span><span class="cal-day free">8</span><span class="cal-day free">9</span><span class="cal-day weekend free">10</span><span class="cal-day weekend busy">11</span><span class="cal-day free">12</span><span class="cal-day free">13</span><span class="cal-day free">14</span><span class="cal-day free">15</span><span class="cal-day free">16</span><span class="cal-day weekend free">17</span><span class="cal-day weekend free">18</span><span class="cal-day free">19</span><span class="cal-day free">20</span><span class="cal-day free">21</span><span class="cal-day free">22</span><span class="cal-day free">23</span><span class="cal-day weekend free">24</span><span class="cal-day weekend free">25</span><span class="cal-day free">26</span><span class="cal-day free">27</span><span class="cal-day free">28</span><span class="cal-day free">29</span><span class="cal-day free">30</span><span class="cal-day weekend free">31</span></div></div><div class="cal-card"><div class="cal-title">Ноябрь</div><div class="cal-head-row"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div class="cal-grid"><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day empty"></span><span class="cal-day weekend free">1</span><span class="cal-day free">2</span><span class="cal-day free">3</span><span class="cal-day free">4</span><span class="cal-day free">5</span><span class="cal-day free">6</span><span class="cal-day weekend free">7</span><span class="cal-day weekend free">8</span><span class="cal-day free">9</span><span class="cal-day free">10</span><span class="cal-day free">11</span><span class="cal-day free">12</span><span class="cal-day free">13</span><span class="cal-day weekend free">14</span><span class="cal-day weekend free">15</span><span class="cal-day free">16</span><span class="cal-day free">17</span><span class="cal-day free">18</span><span class="cal-day free">19</span><span class="cal-day free">20</span><span class="cal-day weekend free">21</span><span class="cal-day weekend free">22</span><span class="cal-day free">23</span><span class="cal-day free">24</span><span class="cal-day free">25</span><span class="cal-day free">26</span><span class="cal-day free">27</span><span class="cal-day weekend free">28</span><span class="cal-day weekend free">29</span><span class="cal-day free">30</span></div></div><div class="cal-card"><div class="cal-title">Декабрь</div><div class="cal-head-row"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div><div class="cal-grid"><span class="cal-day empty"></span><span class="cal-day free">1</span><span class="cal-day free">2</span><span class="cal-day free">3</span><span class="cal-day free">4</span><span class="cal-day weekend free">5</span><span class="cal-day weekend free">6</span><span class="cal-day free">7</span><span class="cal-day free">8</span><span class="cal-day free">9</span><span class="cal-day free">10</span><span class="cal-day free">11</span><span class="cal-day weekend free">12</span><span class="cal-day weekend free">13</span><span class="cal-day free">14</span><span class="cal-day free">15</span><span class="cal-day free">16</span><span class="cal-day free">17</span><span class="cal-day free">18</span><span class="cal-day weekend free">19</span><span class="cal-day weekend free">20</span><span class="cal-day free">21</span><span class="cal-day free">22</span><span class="cal-day free">23</span><span class="cal-day free">24</span><span class="cal-day free">25</span><span class="cal-day weekend free">26</span><span class="cal-day weekend free">27</span><span class="cal-day free">28</span><span class="cal-day free">29</span><span class="cal-day free">30</span><span class="cal-day free">31</span></div></div>
-  </div>
-
-  <div class="cta">
+  <div class="cta" id="ctaBlock">
     <h2>Записаться</h2>
     <p>Напиши в любой удобный мессенджер — согласуем дату, идею и стоимость.</p>
     <div class="cta-buttons">
-      <a class="btn btn-accent" href="https://t.me/VOODOOSTUDIO" target="_blank" rel="noopener">Telegram</a>
+      <a class="btn btn-y" href="https://t.me/VOODOOSTUDIO" target="_blank" rel="noopener">Telegram</a>
       <a class="btn btn-ghost" href="https://vk.ru/voodookrsk" target="_blank" rel="noopener">ВКонтакте</a>
       <a class="btn btn-ghost" href="tel:+79234203338">МАКС +7 923 420-33-38</a>
     </div>
   </div>
 
-  <footer class="note">Страница обновляется вручную при изменении записи — если нужной даты нет в списке, просто уточни у мастера.</footer>
+  <footer class="note" id="footNote">Страница обновляется в реальном времени.</footer>
 </div>
+
+<div class="modal-overlay" id="pinModal" hidden>
+  <div class="modal-box">
+    <h3>Режим мастера</h3>
+    <label>Пинкод<input type="password" inputmode="numeric" id="pinInput" placeholder="••••"></label>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closePinModal()">Отмена</button>
+      <button class="btn-accent" onclick="submitPin()">Войти</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="entryModal" hidden>
+  <div class="modal-box">
+    <h3 id="modalTitle">Новая запись</h3>
+    <label>Дата<input type="date" id="mDate"></label>
+    <label>Время<input type="time" id="mTime"></label>
+    <label>Клиент<input type="text" id="mClient" placeholder="Имя"></label>
+    <label>Откуда клиент
+      <select id="mSource">
+        <option value="VK">ВКонтакте</option>
+        <option value="TG">Telegram</option>
+        <option value="WA">WhatsApp</option>
+        <option value="MAX">МАКС</option>
+      </select>
+    </label>
+    <label>Цена, ₽<input type="number" id="mPrice" step="500" min="0" placeholder="12000"></label>
+    <label>Телефон / контакт<input type="text" id="mPhone" placeholder="+7 900 000-00-00"></label>
+    <label>Комментарий<textarea id="mComment" rows="2" placeholder="Заметки"></textarea></label>
+    <div class="modal-actions">
+      <button class="btn-danger" id="modalDelete" onclick="deleteModalEntry()" hidden>Удалить</button>
+      <button class="btn-ghost" onclick="closeEntryModal()">Отмена</button>
+      <button class="btn-accent" onclick="saveModalEntry()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script>
+  const SB_URL = 'https://eqahyhujqbnbvdhgjmbz.supabase.co';
+  const SB_KEY = 'sb_publishable_6VCLZQVP_JAiFRgoqkjsRQ_P7tKqsnr';
+  const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const DOW = ["ВС","ПН","ВТ","СР","ЧТ","ПТ","СБ"];
+  const SOURCE_SUFFIX = {VK:"ВК",TG:"Т",WA:"W",MAX:"М"};
+
+  let pin = localStorage.getItem('voodoo_pin') || null;
+  let bookings = []; // full rows in master mode, or [] with busyDates in public mode
+  let busyDates = new Set();
+  let today = new Date();
+  let activeYear = today.getFullYear();
+  let activeMonth = today.getMonth() + 1;
+  let editingId = null;
+  let modalOpen = false;
+  let toastTimer = null;
+  let refreshTimer = null;
+
+  function showToast(msg){
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+  }
+
+  async function rpc(name, body){
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok){
+      const msg = (data && (data.message || data.hint)) || ('HTTP ' + res.status);
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  async function loadPublic(){
+    const rows = await rpc('get_public_availability');
+    busyDates = new Set((rows || []).map(r => r.booking_date));
+  }
+
+  async function loadMaster(){
+    const rows = await rpc('master_list_bookings', {p_pin: pin});
+    bookings = rows || [];
+  }
+
+  function isMaster(){ return !!pin; }
+
+  function fmtMoney(n){ return Math.round(n||0).toLocaleString('ru-RU') + ' ₽'; }
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function dateStr(y,m,d){ return `${y}-${pad(m)}-${pad(d)}`; }
+  function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
+  function weekday(y,m,d){ return new Date(y, m-1, d).getDay(); }
+  function isToday(y,m,d){ return today.getFullYear()===y && today.getMonth()+1===m && today.getDate()===d; }
+
+  function monthList(){
+    // current month .. +5 months ahead, across year boundary
+    const out = [];
+    for (let i=0;i<6;i++){
+      let m = activeMonth0Base(i);
+      out.push(m);
+    }
+    return out;
+  }
+  function activeMonth0Base(i){
+    const base = today.getMonth() + i;
+    return { year: today.getFullYear() + Math.floor(base/12), month: (base%12)+1 };
+  }
+
+  function renderMonthTabs(){
+    const el = document.getElementById('monthTabs');
+    el.innerHTML = '';
+    const list = monthList();
+    list.forEach(({year,month}) => {
+      const btn = document.createElement('button');
+      btn.className = 'month-tab' + (month===activeMonth && year===activeYear ? ' active' : '');
+      btn.textContent = MONTHS[month-1] + (year !== today.getFullYear() ? ' ' + year : '');
+      btn.onclick = () => { activeMonth = month; activeYear = year; renderAll(); };
+      el.appendChild(btn);
+    });
+  }
+
+  function renderSummary(){
+    const summaryEl = document.getElementById('monthSummary');
+    if (!isMaster()){ summaryEl.hidden = true; return; }
+    summaryEl.hidden = false;
+    const monthBookings = bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`);
+    const total = monthBookings.reduce((s,b) => s + (Number(b.price)||0), 0);
+    const bookedDays = new Set(monthBookings.map(b => b.booking_date)).size;
+    const nDays = daysInMonth(activeYear, activeMonth);
+    const avgSession = monthBookings.length ? total/monthBookings.length : 0;
+    const avgDay = total / nDays;
+    summaryEl.innerHTML = `
+      <div class="stat"><span>Занято дней</span><b>${bookedDays} из ${nDays}</b></div>
+      <div class="stat"><span>Сеансов</span><b>${monthBookings.length}</b></div>
+      <div class="stat"><span>Сумма по записям</span><b>${fmtMoney(total)}</b></div>
+      <div class="stat"><span>Средний чек</span><b>${fmtMoney(avgSession)}</b></div>
+      <div class="stat"><span>Среднее в календарный день</span><b>${fmtMoney(avgDay)}</b></div>
+    `;
+  }
+
+  function renderDayList(){
+    const list = document.getElementById('dayList');
+    list.innerHTML = '';
+    const nDays = daysInMonth(activeYear, activeMonth);
+    const master = isMaster();
+    const monthBookings = master ? bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`) : [];
+
+    for (let d=1; d<=nDays; d++){
+      const dow = weekday(activeYear, activeMonth, d);
+      const weekend = dow===0 || dow===6;
+      const ds = dateStr(activeYear, activeMonth, d);
+      const dayEntries = master ? monthBookings.filter(b => b.booking_date === ds).sort((a,b)=> (a.start_time||'').localeCompare(b.start_time||'')) : [];
+      const busy = master ? dayEntries.length>0 : busyDates.has(ds);
+
+      const row = document.createElement('div');
+      row.className = 'day-row' + (weekend?' weekend':'') + (isToday(activeYear,activeMonth,d)?' today':'') + (!busy?' free':'');
+
+      let inner = `<div class="day-date"><span class="day-num">${d}</span><span class="day-dow">${DOW[dow]}</span></div>`;
+
+      if (master){
+        if (dayEntries.length===0){
+          inner += `<button class="day-empty-btn" onclick="openEntryModal(null,'${ds}')">Свободно <span>+</span></button>`;
+        } else {
+          inner += '<div class="day-entries">' + dayEntries.map(b => {
+            const suffix = SOURCE_SUFFIX[b.source] || (b.source||'');
+            const sub = [b.notes, b.phone].filter(Boolean).join(' · ');
+            return `<div class="entry" onclick="openEntryModal('${b.id}', null)">
+              <div class="entry-main">
+                <span class="entry-time">${b.start_time||''}</span>
+                <span class="entry-client">${escapeHtml(b.client_name||'')} ${suffix}.</span>
+                <span class="entry-price">${fmtMoney(b.price)}</span>
+              </div>
+              ${sub ? `<div class="entry-sub">${escapeHtml(sub)}</div>` : ''}
+            </div>`;
+          }).join('') + `<button class="day-add-btn" onclick="openEntryModal(null,'${ds}')">+ Добавить запись</button></div>`;
+        }
+      } else {
+        inner += busy
+          ? `<div class="day-status">занято</div>`
+          : `<div class="day-status free-label">свободно</div>`;
+      }
+
+      row.innerHTML = inner;
+      list.appendChild(row);
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderAll(){
+    renderMonthTabs();
+    renderSummary();
+    renderDayList();
+    document.getElementById('brandSub').textContent = isMaster() ? 'Режим мастера — полная сводка' : 'Свободные даты записи';
+    document.getElementById('modeBtn').textContent = isMaster() ? 'Выйти из режима мастера' : 'Войти как мастер';
+    document.getElementById('modeBtn').classList.toggle('on', isMaster());
+    document.getElementById('ctaBlock').hidden = isMaster();
+  }
+
+  function onModeBtnClick(){
+    if (isMaster()){
+      pin = null;
+      localStorage.removeItem('voodoo_pin');
+      loadPublic().then(renderAll).catch(e => showToast('Ошибка: ' + e.message));
+    } else {
+      openPinModal();
+    }
+  }
+
+  function openPinModal(){
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinModal').hidden = false;
+    modalOpen = true;
+    setTimeout(() => document.getElementById('pinInput').focus(), 50);
+  }
+  function closePinModal(){ document.getElementById('pinModal').hidden = true; modalOpen = false; }
+
+  async function submitPin(){
+    const val = document.getElementById('pinInput').value.trim();
+    if (!val){ return; }
+    try {
+      const rows = await rpc('master_list_bookings', {p_pin: val});
+      pin = val;
+      localStorage.setItem('voodoo_pin', val);
+      bookings = rows || [];
+      closePinModal();
+      renderAll();
+      showToast('Вход выполнен');
+    } catch(e){
+      showToast('Неверный пинкод');
+    }
+  }
+
+  function openEntryModal(id, prefillDate){
+    editingId = id || null;
+    const entry = id ? bookings.find(b => b.id === id) : null;
+    document.getElementById('mDate').value = entry ? entry.booking_date : (prefillDate || dateStr(activeYear,activeMonth,1));
+    document.getElementById('mTime').value = entry ? (entry.start_time||'12:00') : '12:00';
+    document.getElementById('mClient').value = entry ? (entry.client_name||'') : '';
+    document.getElementById('mSource').value = entry ? (entry.source||'VK') : 'VK';
+    document.getElementById('mPrice').value = entry ? (entry.price||'') : '';
+    document.getElementById('mPhone').value = entry ? (entry.phone||'') : '';
+    document.getElementById('mComment').value = entry ? (entry.notes||'') : '';
+    document.getElementById('modalTitle').textContent = entry ? 'Изменить запись' : 'Новая запись';
+    document.getElementById('modalDelete').hidden = !entry;
+    document.getElementById('entryModal').hidden = false;
+    modalOpen = true;
+  }
+  function closeEntryModal(){ document.getElementById('entryModal').hidden = true; modalOpen = false; editingId = null; }
+
+  async function saveModalEntry(){
+    const bDate = document.getElementById('mDate').value;
+    const time = document.getElementById('mTime').value.trim();
+    const client = document.getElementById('mClient').value.trim();
+    const source = document.getElementById('mSource').value;
+    const priceRaw = document.getElementById('mPrice').value;
+    const price = priceRaw === '' ? 0 : parseFloat(priceRaw);
+    const phone = document.getElementById('mPhone').value.trim();
+    const comment = document.getElementById('mComment').value.trim();
+    if (!bDate || !time || !client){ showToast('Заполни дату, время и имя клиента.'); return; }
+    try {
+      await rpc('master_upsert_booking', {
+        p_pin: pin, p_id: editingId, p_booking_date: bDate, p_start_time: time,
+        p_client_name: client, p_phone: phone || null, p_source: source,
+        p_service: null, p_price: price, p_status: 'booked', p_notes: comment || null
+      });
+      closeEntryModal();
+      await loadMaster();
+      renderAll();
+      showToast('Сохранено ✓');
+    } catch(e){ showToast('Ошибка сохранения: ' + e.message); }
+  }
+
+  async function deleteModalEntry(){
+    if (!editingId) return;
+    try {
+      await rpc('master_delete_booking', {p_pin: pin, p_id: editingId});
+      closeEntryModal();
+      await loadMaster();
+      renderAll();
+      showToast('Удалено');
+    } catch(e){ showToast('Ошибка удаления: ' + e.message); }
+  }
+
+  async function refreshLoop(){
+    if (!modalOpen){
+      try {
+        if (isMaster()) await loadMaster(); else await loadPublic();
+        renderAll();
+      } catch(e){ /* silent */ }
+    }
+    refreshTimer = setTimeout(refreshLoop, 20000);
+  }
+
+  async function init(){
+    try {
+      if (isMaster()){
+        try { await loadMaster(); } catch(e){ pin = null; localStorage.removeItem('voodoo_pin'); await loadPublic(); }
+      } else {
+        await loadPublic();
+      }
+    } catch(e){ showToast('Не удалось загрузить расписание'); }
+    renderAll();
+    refreshTimer = setTimeout(refreshLoop, 20000);
+  }
+
+  init();
+</script>
 </body>
 </html>
