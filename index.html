@@ -666,7 +666,9 @@
   }
 
   function parseVoiceCommand(rawText){
-    const text = rawText.toLowerCase();
+    // normalize dotted/comma thousand separators ("8.000" / "8,000" -> "8000") BEFORE any other
+    // parsing, so a price like "8.000 руб" isn't misread as a time "08:00" by the time regex.
+    const text = rawText.toLowerCase().replace(/(\d{1,3})[.,](\d{3})(?!\d)/g, '$1$2');
     let action = 'create';
     if (/отмен|удал/.test(text)) action = 'cancel';
     else if (/перенес|перенос|измени|поменяй/.test(text)) action = 'edit';
@@ -694,7 +696,7 @@
 
     // time
     let time = null;
-    let timeMatch = rest.match(/(\d{1,2})\s*[:.]\s*(\d{2})/);
+    let timeMatch = rest.match(/(\d{1,2})\s*[:.]\s*(\d{2})(?!\d)/);
     if (timeMatch){
       time = pad(parseInt(timeMatch[1],10)) + ':' + timeMatch[2];
     } else {
@@ -721,12 +723,14 @@
     else if (/(?<![а-яё])макс(?![а-яё])|(?<![a-z])max(?![a-z])/.test(text)) source = 'MAX';
 
     // name
+    const NAME_STOPWORDS = new Set(['на','в','и','у','к','с','по','для','это','число','месяц','вк','тг','вотсап','ватсап','вконтакте','телеграм','макс','рублей','руб','тысяч','тыс']);
     let name = null;
     let nm = text.match(/(?:запиши|запись)\s+([а-яё]+)\s+на(?![а-яё])/);
     if (!nm) nm = text.match(/сеанс\s+([а-яё]+)/);
     if (!nm && action === 'cancel') nm = text.match(/(?:отмени|отменить|удали|удалить)(?:\s+запись)?\s+(?:у\s+)?([а-яё]+)/);
     if (!nm && action === 'edit') nm = text.match(/перенес[а-я]*\s+([а-яё]+)/);
-    if (!nm) nm = text.match(/запиши\s+([а-яё]+)/);
+    // discard a match that's actually a preposition/filler word (e.g. "запиши НА 2 октября...")
+    if (nm && NAME_STOPWORDS.has(nm[1])) nm = null;
     if (nm){ name = nm[1]; }
 
     // fallback: no command-word pattern matched (e.g. free-form "2 октября, 12 часов, 6 тыс, Виталий") —
