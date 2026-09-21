@@ -358,7 +358,7 @@
     document.getElementById('mTime').value = entry ? (entry.start_time||'12:00') : '12:00';
     document.getElementById('mClient').value = entry ? (entry.client_name||'') : '';
     document.getElementById('mSource').value = entry ? (entry.source||'VK') : 'VK';
-    document.getElementById('mPrice').value = entry ? (entry.price||'') : '';
+    document.getElementById('mPrice').value = entry ? (entry.price!=null ? entry.price : '') : '';
     document.getElementById('mPhone').value = entry ? (entry.phone||'') : '';
     document.getElementById('mComment').value = entry ? (entry.notes||'') : '';
     document.getElementById('modalTitle').textContent = entry ? 'Изменить запись' : 'Новая запись';
