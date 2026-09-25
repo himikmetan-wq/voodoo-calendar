@@ -99,6 +99,38 @@
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:90%;background:var(--surface-3);border:1px solid var(--accent);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;text-align:center;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.4);}
   .toast[hidden]{display:none;}
   .note{font-size:12px;color:var(--text-muted);text-align:center;padding-block:8px 4px;}
+
+  .view-toggle{display:none;gap:8px;}
+  .view-toggle.show{display:flex;}
+  .view-btn{padding:7px 12px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+  .view-btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+
+  .grid-actions{display:none;gap:8px;flex-wrap:wrap;}
+  .grid-actions.show{display:flex;}
+  .btn-download{padding:9px 14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+
+  .month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .grid-dow{font-size:11px;color:var(--text-muted);text-align:center;text-transform:uppercase;letter-spacing:.3px;padding-bottom:2px;}
+  .grid-cell{aspect-ratio:1;border-radius:10px;border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+  .grid-cell.empty{visibility:hidden;}
+  .grid-cell .g-num{font-family:'Russo One',sans-serif;font-size:16px;line-height:1;color:var(--text);}
+  .grid-cell.busy{background:var(--busy-bg);}
+  .grid-cell.busy .g-num{color:var(--text-muted);}
+  .grid-cell.weekend .g-num{color:var(--accent);}
+  .grid-cell.free{background:var(--free-neon);box-shadow:0 0 12px var(--free-neon-glow);}
+  .grid-cell.free .g-num{color:#1a1206;}
+  .grid-cell.today{outline:2px solid var(--accent);outline-offset:1px;}
+  .grid-legend{display:flex;gap:16px;justify-content:center;font-size:12px;color:var(--text-muted);padding-top:2px;flex-wrap:wrap;}
+  .grid-legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend-dot{width:12px;height:12px;border-radius:4px;display:inline-block;}
+  .legend-dot.free{background:var(--free-neon);}
+  .legend-dot.busy{background:var(--busy-bg);border:1px solid var(--border-strong);}
+
+  .contacts-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .contact-row{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--surface);font-size:14px;}
+  .contact-row b{font-weight:700;}
+  .contact-phone{color:var(--accent);font-variant-numeric:tabular-nums;}
+  .contact-meta{font-size:12px;color:var(--text-muted);margin-left:auto;}
 </style>
 </head>
 <body>
@@ -117,11 +149,22 @@
     <div class="voice-row" id="voiceRow">
       <button class="mic-btn" id="voiceBtn" onclick="toggleVoiceCommand()">🎤 Голосом</button>
     </div>
+    <div class="view-toggle" id="viewToggle">
+      <button class="view-btn" id="viewBookingsBtn" onclick="setMasterView('bookings')">Записи</button>
+      <button class="view-btn" id="viewContactsBtn" onclick="setMasterView('contacts')">📇 База</button>
+    </div>
     <div class="month-tabs" id="monthTabs"></div>
     <div class="month-summary" id="monthSummary" hidden></div>
+    <div class="grid-actions" id="gridActions">
+      <button class="btn-download" onclick="downloadMonthImage()">📷 Скачать картинку</button>
+    </div>
   </header>
 
   <section>
+    <div class="contacts-actions" id="contactsActions" hidden>
+      <button class="btn-ghost" onclick="copyContactsPhones()">📋 Скопировать номера</button>
+      <button class="btn-ghost" onclick="downloadContactsCSV()">⬇️ Скачать CSV</button>
+    </div>
     <div class="day-list" id="dayList"></div>
   </section>
 
@@ -203,6 +246,7 @@
   let masterPin = localStorage.getItem('voodoo_pin') || null;
   let secretaryPin = localStorage.getItem('voodoo_sec_pin') || null;
   let mode = 'public'; // 'public' | 'master' | 'secretary'
+  let masterView = 'bookings'; // 'bookings' | 'contacts' (master mode only)
   let bookings = []; // full rows in master mode
   let secRows = []; // rows in secretary mode
   let busyDates = new Set(); // public mode
@@ -290,7 +334,7 @@
 
   function renderSummary(){
     const summaryEl = document.getElementById('monthSummary');
-    if (mode !== 'master'){ summaryEl.hidden = true; return; }
+    if (mode !== 'master' || masterView === 'contacts'){ summaryEl.hidden = true; return; }
     summaryEl.hidden = false;
     const monthBookings = bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`);
     const clientBookings = monthBookings.filter(b => !b.is_personal);
@@ -311,6 +355,16 @@
   function renderDayList(){
     const list = document.getElementById('dayList');
     list.innerHTML = '';
+
+    if (mode==='master' && masterView==='contacts'){
+      renderContactsInto(list);
+      return;
+    }
+    if (mode==='public'){
+      renderPublicGrid(list);
+      return;
+    }
+
     const nDays = daysInMonth(activeYear, activeMonth);
     const monthKey = `${activeYear}-${pad(activeMonth)}`;
     const monthBookings = mode==='master' ? bookings.filter(b => b.booking_date.slice(0,7) === monthKey) : [];
@@ -383,10 +437,6 @@
             return `<div class="entry-readonly"><span class="entry-time">${r.start_time||''}</span> занято${r.duration_hours!=null ? ' · '+r.duration_hours+' ч' : ''}</div>`;
           }).join('') + `<button class="day-add-btn" onclick="openSecModal(null,'${ds}')">+ Добавить</button></div>`;
         }
-      } else {
-        inner += busy
-          ? `<div class="day-status">занято</div>`
-          : `<div class="day-status free-label">свободно</div>`;
       }
 
       row.innerHTML = inner;
@@ -396,6 +446,255 @@
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  const GRID_DOW = ["ПН","ВТ","СР","ЧТ","ПТ","СБ","ВС"];
+
+  function renderPublicGrid(list){
+    const nDays = daysInMonth(activeYear, activeMonth);
+    const firstDow = weekday(activeYear, activeMonth, 1); // 0=Sun..6=Sat
+    const leadBlanks = (firstDow + 6) % 7; // Monday-first offset
+
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.gap = '10px';
+
+    const dowRow = document.createElement('div');
+    dowRow.className = 'month-grid';
+    GRID_DOW.forEach(d => {
+      const el = document.createElement('div');
+      el.className = 'grid-dow';
+      el.textContent = d;
+      dowRow.appendChild(el);
+    });
+    wrap.appendChild(dowRow);
+
+    const grid = document.createElement('div');
+    grid.className = 'month-grid';
+    for (let i=0;i<leadBlanks;i++){
+      const c = document.createElement('div');
+      c.className = 'grid-cell empty';
+      grid.appendChild(c);
+    }
+    for (let d=1; d<=nDays; d++){
+      const dow = weekday(activeYear, activeMonth, d);
+      const weekend = dow===0 || dow===6;
+      const ds = dateStr(activeYear, activeMonth, d);
+      const busy = busyDates.has(ds);
+      const cell = document.createElement('div');
+      cell.className = 'grid-cell' + (busy?' busy':' free') + (weekend?' weekend':'') + (isToday(activeYear,activeMonth,d)?' today':'');
+      cell.innerHTML = `<span class="g-num">${d}</span>`;
+      grid.appendChild(cell);
+    }
+    wrap.appendChild(grid);
+
+    const legend = document.createElement('div');
+    legend.className = 'grid-legend';
+    legend.innerHTML = `<span><span class="legend-dot free"></span>свободно</span><span><span class="legend-dot busy"></span>занято</span>`;
+    wrap.appendChild(legend);
+
+    list.appendChild(wrap);
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  async function downloadMonthImage(){
+    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
+
+    const nDays = daysInMonth(activeYear, activeMonth);
+    const firstDow = weekday(activeYear, activeMonth, 1);
+    const leadBlanks = (firstDow + 6) % 7;
+    const rows = Math.ceil((leadBlanks + nDays) / 7);
+
+    const scale = 2;
+    const W = 1080, PAD = 56;
+    const cols = 7, gap = 14;
+    const cellSize = (W - PAD*2 - gap*(cols-1)) / cols;
+    const headerH = 150, dowH = 40, gapAfterDow = 16, gapAfterGrid = 24, legendH = 50, footerH = 130;
+    const gridH = rows*cellSize + (rows-1)*gap;
+    const H = headerH + dowH + gapAfterDow + gridH + gapAfterGrid + legendH + footerH + PAD;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(W*scale); canvas.height = Math.round(H*scale);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0,0,W,H);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e6b23c';
+    ctx.font = "700 40px 'Russo One', sans-serif";
+    ctx.fillText('VOODOO', PAD, PAD+36);
+    ctx.fillStyle = '#9a9a94';
+    ctx.font = "400 16px 'Golos Text', sans-serif";
+    ctx.fillText('Свободные даты записи', PAD, PAD+62);
+
+    ctx.fillStyle = '#f5f5f0';
+    ctx.font = "400 26px 'Russo One', sans-serif";
+    ctx.textAlign = 'right';
+    const monthLabel = MONTHS[activeMonth-1] + (activeYear !== today.getFullYear() ? ' ' + activeYear : '');
+    ctx.fillText(monthLabel, W-PAD, PAD+50);
+
+    let y = headerH;
+    ctx.font = "700 15px 'Golos Text', sans-serif";
+    ctx.fillStyle = '#9a9a94';
+    ctx.textAlign = 'center';
+    for (let c=0;c<7;c++){
+      const cx = PAD + c*(cellSize+gap) + cellSize/2;
+      ctx.fillText(GRID_DOW[c], cx, y + 16);
+    }
+    y += dowH + gapAfterDow;
+
+    let dayNum = 1;
+    for (let r=0;r<rows;r++){
+      for (let c=0;c<7;c++){
+        const idx = r*7+c;
+        const cx = PAD + c*(cellSize+gap);
+        const cy = y + r*(cellSize+gap);
+        if (idx < leadBlanks || dayNum > nDays){ continue; }
+        const d = dayNum;
+        const dow = weekday(activeYear, activeMonth, d);
+        const weekend = dow===0 || dow===6;
+        const ds = dateStr(activeYear, activeMonth, d);
+        const busy = busyDates.has(ds);
+        const isTod = isToday(activeYear, activeMonth, d);
+
+        roundRect(ctx, cx, cy, cellSize, cellSize, 12);
+        ctx.fillStyle = busy ? 'rgba(245,245,240,.06)' : '#f4ff2e';
+        ctx.fill();
+        ctx.lineWidth = isTod ? 3 : 1;
+        ctx.strokeStyle = isTod ? '#e6b23c' : 'rgba(245,245,240,.09)';
+        ctx.stroke();
+
+        ctx.font = "400 22px 'Russo One', sans-serif";
+        ctx.fillStyle = busy ? (weekend ? '#c9a15a' : '#9a9a94') : '#1a1206';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(d), cx+cellSize/2, cy+cellSize/2+8);
+
+        dayNum++;
+      }
+    }
+    y += gridH + gapAfterGrid;
+
+    ctx.textAlign = 'left';
+    ctx.font = "400 15px 'Golos Text', sans-serif";
+    const legendCenterX = W/2;
+    ctx.fillStyle = '#f4ff2e';
+    roundRect(ctx, legendCenterX-140, y+2, 14, 14, 4); ctx.fill();
+    ctx.fillStyle = '#9a9a94';
+    ctx.fillText('свободно', legendCenterX-118, y+14);
+    ctx.fillStyle = 'rgba(245,245,240,.06)';
+    ctx.strokeStyle = 'rgba(245,245,240,.16)'; ctx.lineWidth = 1;
+    roundRect(ctx, legendCenterX+10, y+2, 14, 14, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#9a9a94';
+    ctx.fillText('занято', legendCenterX+32, y+14);
+    y += legendH;
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f5f5f0';
+    ctx.font = "400 17px 'Golos Text', sans-serif";
+    ctx.fillText('Записаться:', W/2, y+22);
+    ctx.font = "700 17px 'Golos Text', sans-serif";
+    ctx.fillStyle = '#e6b23c';
+    ctx.fillText('Telegram: @VOODOOSTUDIO   ·   ВК: vk.ru/voodookrsk', W/2, y+52);
+    ctx.fillStyle = '#9a9a94';
+    ctx.font = "400 15px 'Golos Text', sans-serif";
+    ctx.fillText('МАКС +7 923 420-33-38', W/2, y+80);
+
+    canvas.toBlob(blob => {
+      if (!blob){ showToast('Не удалось создать картинку'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `voodoo-${activeYear}-${pad(activeMonth)}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      showToast('Картинка сохранена ✓');
+    }, 'image/png');
+  }
+
+  function computeContacts(){
+    const map = new Map();
+    bookings.filter(b => !b.is_personal).forEach(b => {
+      const phone = (b.phone||'').trim();
+      const nameKey = normalizeRu(b.client_name||'').trim();
+      if (!phone && !nameKey) return;
+      const key = phone ? ('p:'+phone) : ('n:'+nameKey);
+      let rec = map.get(key);
+      if (!rec){
+        rec = {name: b.client_name||'', phone: phone, count: 0, total: 0, lastDate: b.booking_date, sources: new Set()};
+        map.set(key, rec);
+      }
+      rec.count++;
+      rec.total += Number(b.price)||0;
+      if (!rec.lastDate || b.booking_date > rec.lastDate){ rec.lastDate = b.booking_date; if (b.client_name) rec.name = b.client_name; }
+      if (!rec.phone && phone){ rec.phone = phone; }
+      if (b.source) rec.sources.add(b.source);
+    });
+    return Array.from(map.values()).sort((a,b) => (a.name||'').localeCompare(b.name||'', 'ru'));
+  }
+
+  function renderContactsInto(list){
+    const contacts = computeContacts();
+    if (!contacts.length){
+      list.innerHTML = '<div class="day-status">Пока нет клиентов с записями.</div>';
+      return;
+    }
+    list.innerHTML = contacts.map(c => {
+      const sessWord = c.count===1 ? 'сеанс' : (c.count>=2 && c.count<=4 ? 'сеанса' : 'сеансов');
+      return `<div class="contact-row">
+        <b>${escapeHtml(c.name||'Без имени')}</b>
+        <span class="contact-phone">${escapeHtml(c.phone || '— без телефона')}</span>
+        <span class="contact-meta">${c.count} ${sessWord} · ${fmtMoney(c.total)} · посл. визит ${c.lastDate}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function fallbackCopy(text, n){
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand('copy'); ta.remove();
+      showToast(`Скопировано ${n} номеров`);
+    } catch(e){ showToast('Не удалось скопировать номера'); }
+  }
+
+  function copyContactsPhones(){
+    const phones = Array.from(new Set(computeContacts().map(c=>c.phone).filter(Boolean))).sort();
+    if (!phones.length){ showToast('Нет ни одного телефона в базе.'); return; }
+    const text = phones.join('\n');
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(() => showToast(`Скопировано ${phones.length} номеров`))
+        .catch(() => fallbackCopy(text, phones.length));
+    } else {
+      fallbackCopy(text, phones.length);
+    }
+  }
+
+  function downloadContactsCSV(){
+    const contacts = computeContacts();
+    if (!contacts.length){ showToast('Нет клиентов для экспорта.'); return; }
+    const esc = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+    const rows = [['Имя','Телефон','Визитов','Сумма','Последний визит','Источники']];
+    contacts.forEach(c => rows.push([c.name, c.phone, c.count, Math.round(c.total), c.lastDate, Array.from(c.sources).join('/')]));
+    const csv = '﻿' + rows.map(r => r.map(esc).join(',')).join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'voodoo-baza-klientov.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   function renderAll(){
@@ -410,6 +709,17 @@
     document.getElementById('secBtn').classList.toggle('on', mode==='secretary');
     document.getElementById('ctaBlock').hidden = mode!=='public';
     document.getElementById('voiceRow').classList.toggle('show', mode==='master');
+    document.getElementById('viewToggle').classList.toggle('show', mode==='master');
+    document.getElementById('viewBookingsBtn').classList.toggle('on', masterView==='bookings');
+    document.getElementById('viewContactsBtn').classList.toggle('on', masterView==='contacts');
+    document.getElementById('gridActions').classList.toggle('show', mode==='public');
+    document.getElementById('contactsActions').hidden = !(mode==='master' && masterView==='contacts');
+    document.getElementById('monthTabs').style.display = (mode==='master' && masterView==='contacts') ? 'none' : '';
+  }
+
+  function setMasterView(v){
+    masterView = v;
+    renderAll();
   }
 
   function onMasterBtnClick(){
@@ -417,6 +727,7 @@
       masterPin = null;
       localStorage.removeItem('voodoo_pin');
       mode = 'public';
+      masterView = 'bookings';
       loadPublic().then(renderAll).catch(e => showToast('Ошибка: ' + e.message));
       return;
     }
