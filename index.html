@@ -135,6 +135,13 @@
   .legend-dot.busy{background:var(--busy-bg);border:1px solid var(--border-strong);}
 
   .contacts-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .base-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);margin-bottom:8px;}
+  .base-form input{font:inherit;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:8px;padding:9px 10px;min-width:0;}
+  .base-form .base-form-actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;}
+  .base-form h4{grid-column:1/-1;margin:0;font-family:'Russo One',sans-serif;font-weight:400;font-size:15px;color:var(--accent);}
+  .contact-row.manual{cursor:pointer;}
+  .contact-row.manual:hover{border-color:var(--accent);}
+  .contact-nick{color:var(--text-muted);font-size:13px;}
   .contact-row{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--surface);font-size:14px;}
   .contact-row b{font-weight:700;}
   .contact-phone{color:var(--accent);font-variant-numeric:tabular-nums;}
@@ -159,7 +166,7 @@
     </div>
     <div class="view-toggle" id="viewToggle">
       <button class="view-btn" id="viewBookingsBtn" onclick="setMasterView('bookings')">Записи</button>
-      <button class="view-btn" id="viewContactsBtn" onclick="setMasterView('contacts')">📇 База</button>
+      <button class="view-btn" id="viewContactsBtn" onclick="setMasterView('contacts')">📇 База клиентов</button>
     </div>
     <div class="month-tabs" id="monthTabs"></div>
     <div class="month-summary" id="monthSummary" hidden></div>
@@ -169,9 +176,23 @@
   </header>
 
   <section>
-    <div class="contacts-actions" id="contactsActions" hidden>
-      <button class="btn-ghost" onclick="copyContactsPhones()">📋 Скопировать номера</button>
-      <button class="btn-ghost" onclick="downloadContactsCSV()">⬇️ Скачать CSV</button>
+    <div id="contactsActions" hidden>
+      <div class="base-form">
+        <h4 id="baseFormTitle">Добавить клиента</h4>
+        <input type="text" id="bName" placeholder="Имя">
+        <input type="text" id="bNick" placeholder="Ник (@username)">
+        <input type="tel" id="bPhone" placeholder="Телефон">
+        <input type="text" id="bNote" placeholder="Заметка">
+        <div class="base-form-actions">
+          <button class="btn-accent" onclick="saveBaseContact()">Сохранить</button>
+          <button class="btn-ghost" id="bCancel" onclick="resetBaseForm()" hidden>Отмена</button>
+          <button class="btn-danger" id="bDelete" onclick="deleteBaseContact()" hidden>Удалить</button>
+        </div>
+      </div>
+      <div class="contacts-actions">
+        <button class="btn-download" onclick="downloadPhones()">⬇️ Скачать номера</button>
+        <button class="btn-download" onclick="downloadContactsCSV()">⬇️ Скачать CSV</button>
+      </div>
     </div>
     <div class="day-list" id="dayList"></div>
   </section>
@@ -255,6 +276,14 @@
   // day as busy automatically, and the secretary RPC exposes start_time, so the wife sees "Выходной".
   const DAY_OFF = 'Выходной';
   function isDayOff(b){ return !!b && (b.source === DAY_OFF || b.start_time === DAY_OFF); }
+  // Manually entered client-base contacts live in the same bookings table (no schema change):
+  // source='База', booking_date=2000-01-01 (never shown in any month), status='contact',
+  // client_name=name, phone=phone, service=nickname, notes=note.
+  const BASE_SRC = 'База';
+  const BASE_DATE = '2000-01-01';
+  function isBaseRow(b){ return !!b && b.source === BASE_SRC; }
+  function isRealBooking(b){ return !b.is_personal && !isDayOff(b) && !isBaseRow(b); }
+  let baseEditingId = null;
 
   let masterPin = localStorage.getItem('voodoo_pin') || null;
   let secretaryPin = localStorage.getItem('voodoo_sec_pin') || null;
@@ -350,9 +379,9 @@
     if (mode !== 'master' || masterView === 'contacts'){ summaryEl.hidden = true; return; }
     summaryEl.hidden = false;
     const monthBookings = bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`);
-    const clientBookings = monthBookings.filter(b => !b.is_personal && !isDayOff(b));
+    const clientBookings = monthBookings.filter(isRealBooking);
     const total = clientBookings.reduce((s,b) => s + (Number(b.price)||0), 0);
-    const bookedDays = new Set(monthBookings.filter(b => !isDayOff(b)).map(b => b.booking_date)).size;
+    const bookedDays = new Set(monthBookings.filter(b => !isDayOff(b) && !isBaseRow(b)).map(b => b.booking_date)).size;
     const daysOff = new Set(monthBookings.filter(isDayOff).map(b => b.booking_date)).size;
     const nDays = daysInMonth(activeYear, activeMonth);
     const avgSession = clientBookings.length ? total/clientBookings.length : 0;
@@ -653,19 +682,24 @@
 
   function computeContacts(){
     const map = new Map();
-    bookings.filter(b => !b.is_personal && !isDayOff(b)).forEach(b => {
+    bookings.filter(isBaseRow).forEach(b => {
+      const phone = (b.phone||'').trim();
+      const key = phone ? ('p:'+phone) : ('m:'+b.id);
+      map.set(key, {id: b.id, manual: true, name: b.client_name||'', nick: b.service||'', note: b.notes||'', phone, count: 0, total: 0, lastDate: '', sources: new Set()});
+    });
+    bookings.filter(isRealBooking).forEach(b => {
       const phone = (b.phone||'').trim();
       const nameKey = normalizeRu(b.client_name||'').trim();
       if (!phone && !nameKey) return;
       const key = phone ? ('p:'+phone) : ('n:'+nameKey);
       let rec = map.get(key);
       if (!rec){
-        rec = {name: b.client_name||'', phone: phone, count: 0, total: 0, lastDate: b.booking_date, sources: new Set()};
+        rec = {name: b.client_name||'', nick: '', note: '', phone: phone, count: 0, total: 0, lastDate: b.booking_date, sources: new Set()};
         map.set(key, rec);
       }
       rec.count++;
       rec.total += Number(b.price)||0;
-      if (!rec.lastDate || b.booking_date > rec.lastDate){ rec.lastDate = b.booking_date; if (b.client_name) rec.name = b.client_name; }
+      if (!rec.lastDate || b.booking_date > rec.lastDate){ rec.lastDate = b.booking_date; if (b.client_name && !rec.manual) rec.name = b.client_name; }
       if (!rec.phone && phone){ rec.phone = phone; }
       if (b.source) rec.sources.add(b.source);
     });
@@ -675,47 +709,96 @@
   function renderContactsInto(list){
     const contacts = computeContacts();
     if (!contacts.length){
-      list.innerHTML = '<div class="day-status">Пока нет клиентов с записями.</div>';
+      list.innerHTML = '<div class="day-status">База пока пустая — добавь первого клиента в форме выше.</div>';
       return;
     }
-    list.innerHTML = contacts.map(c => {
+    list.innerHTML = `<div class="day-status">Клиентов в базе: ${contacts.length}. Нажми на клиента, чтобы изменить.</div>` + contacts.map(c => {
       const sessWord = c.count===1 ? 'сеанс' : (c.count>=2 && c.count<=4 ? 'сеанса' : 'сеансов');
-      return `<div class="contact-row">
+      const meta = c.count ? `${c.count} ${sessWord} · ${fmtMoney(c.total)} · посл. визит ${c.lastDate}` : (c.note ? escapeHtml(c.note) : '');
+      const click = c.manual ? ` onclick="editBaseContact('${c.id}')"` : '';
+      return `<div class="contact-row${c.manual?' manual':''}"${click}>
         <b>${escapeHtml(c.name||'Без имени')}</b>
+        ${c.nick ? `<span class="contact-nick">${escapeHtml(c.nick)}</span>` : ''}
         <span class="contact-phone">${escapeHtml(c.phone || '— без телефона')}</span>
-        <span class="contact-meta">${c.count} ${sessWord} · ${fmtMoney(c.total)} · посл. визит ${c.lastDate}</span>
+        <span class="contact-meta">${meta}</span>
       </div>`;
     }).join('');
   }
 
-  function fallbackCopy(text, n){
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
-      document.body.appendChild(ta); ta.focus(); ta.select();
-      document.execCommand('copy'); ta.remove();
-      showToast(`Скопировано ${n} номеров`);
-    } catch(e){ showToast('Не удалось скопировать номера'); }
+  function saveTextFile(text, name, type){
+    const blob = new Blob([text], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  function copyContactsPhones(){
+  function downloadPhones(){
     const phones = Array.from(new Set(computeContacts().map(c=>c.phone).filter(Boolean))).sort();
     if (!phones.length){ showToast('Нет ни одного телефона в базе.'); return; }
-    const text = phones.join('\n');
-    if (navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(() => showToast(`Скопировано ${phones.length} номеров`))
-        .catch(() => fallbackCopy(text, phones.length));
-    } else {
-      fallbackCopy(text, phones.length);
-    }
+    saveTextFile(phones.join('\r\n'), 'voodoo-nomera.txt', 'text/plain;charset=utf-8');
+    showToast(`Скачано ${phones.length} номеров`);
+  }
+
+  function resetBaseForm(){
+    baseEditingId = null;
+    ['bName','bNick','bPhone','bNote'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('baseFormTitle').textContent = 'Добавить клиента';
+    document.getElementById('bCancel').hidden = true;
+    document.getElementById('bDelete').hidden = true;
+  }
+
+  function editBaseContact(id){
+    const b = bookings.find(x => x.id === id);
+    if (!b) return;
+    baseEditingId = id;
+    document.getElementById('bName').value = b.client_name || '';
+    document.getElementById('bNick').value = b.service || '';
+    document.getElementById('bPhone').value = b.phone || '';
+    document.getElementById('bNote').value = b.notes || '';
+    document.getElementById('baseFormTitle').textContent = 'Изменить клиента';
+    document.getElementById('bCancel').hidden = false;
+    document.getElementById('bDelete').hidden = false;
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+
+  async function saveBaseContact(){
+    const name = document.getElementById('bName').value.trim();
+    const nick = document.getElementById('bNick').value.trim();
+    const phone = document.getElementById('bPhone').value.trim();
+    const note = document.getElementById('bNote').value.trim();
+    if (!name && !nick && !phone){ showToast('Впиши хотя бы имя, ник или телефон.'); return; }
+    try {
+      await rpc('master_upsert_booking', {
+        p_pin: masterPin, p_id: baseEditingId, p_booking_date: BASE_DATE, p_start_time: '00:00',
+        p_client_name: name || nick || phone, p_phone: phone || null, p_source: BASE_SRC,
+        p_service: nick || null, p_price: 0, p_status: 'contact', p_notes: note || null
+      });
+      resetBaseForm();
+      await loadMaster();
+      renderAll();
+      showToast('Сохранено в базу ✓');
+    } catch(e){ showToast('Ошибка: ' + e.message); }
+  }
+
+  async function deleteBaseContact(){
+    if (!baseEditingId) return;
+    try {
+      await rpc('master_delete_booking', {p_pin: masterPin, p_id: baseEditingId});
+      resetBaseForm();
+      await loadMaster();
+      renderAll();
+      showToast('Удалено из базы');
+    } catch(e){ showToast('Ошибка: ' + e.message); }
   }
 
   function downloadContactsCSV(){
     const contacts = computeContacts();
     if (!contacts.length){ showToast('Нет клиентов для экспорта.'); return; }
     const esc = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
-    const rows = [['Имя','Телефон','Визитов','Сумма','Последний визит','Источники']];
-    contacts.forEach(c => rows.push([c.name, c.phone, c.count, Math.round(c.total), c.lastDate, Array.from(c.sources).join('/')]));
+    const rows = [['Имя','Ник','Телефон','Заметка','Визитов','Сумма','Последний визит','Источники']];
+    contacts.forEach(c => rows.push([c.name, c.nick, c.phone, c.note, c.count, Math.round(c.total), c.lastDate, Array.from(c.sources).join('/')]));
     const csv = '﻿' + rows.map(r => r.map(esc).join(',')).join('\r\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
     const url = URL.createObjectURL(blob);
@@ -1019,7 +1102,7 @@
     if (!nameGuess) return [];
     const needle = normalizeRu(nameGuess);
     const stem = needle.slice(0, Math.max(3, needle.length - 2));
-    let matches = bookings.filter(b => !b.is_personal && !isDayOff(b) && b.status !== 'cancelled' && normalizeRu(b.client_name).startsWith(stem));
+    let matches = bookings.filter(b => isRealBooking(b) && b.status !== 'cancelled' && normalizeRu(b.client_name).startsWith(stem));
     if (dateGuess){
       const byDate = matches.filter(b => b.booking_date === dateGuess);
       if (byDate.length) matches = byDate;
