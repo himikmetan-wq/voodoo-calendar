@@ -21,6 +21,7 @@
     --personal:#7ad1e6;
   }
   *{box-sizing:border-box;}
+  [hidden]{display:none !important;}
   html{background:var(--bg);}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Golos Text',system-ui,-apple-system,sans-serif;padding-inline:16px;padding-block:20px 40px;}
   .page{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}
@@ -74,6 +75,13 @@
   .entry-readonly{font-size:14px;color:var(--text-muted);padding:4px 0 4px 10px;border-left:3px solid var(--border-strong);}
   .day-add-btn{font:inherit;font-size:13px;color:var(--accent);background:none;border:1px dashed var(--border-strong);border-radius:8px;padding:7px 10px;cursor:pointer;text-align:left;width:fit-content;}
   .day-empty-btn{font:inherit;font-size:14px;font-weight:700;letter-spacing:.2px;color:#1a1206;background:var(--free-neon);border:1px solid var(--free-neon);border-radius:8px;padding:8px 12px;cursor:pointer;text-align:left;width:fit-content;box-shadow:0 0 14px var(--free-neon-glow),0 0 2px rgba(244,255,46,.9);}
+  .day-free-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .day-off-btn{font:inherit;font-size:13px;font-weight:700;color:var(--accent);background:var(--surface-2);border:1px solid var(--accent);border-radius:8px;padding:8px 12px;cursor:pointer;}
+  .day-row.dayoff{background:var(--surface-2);border-color:rgba(230,178,60,.35);}
+  .day-row.dayoff .day-num{color:var(--text-muted);}
+  .dayoff-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-left:3px solid var(--accent);padding:4px 0 4px 10px;border-radius:0 8px 8px 0;}
+  .dayoff-label{font-family:'Russo One',sans-serif;font-size:15px;color:var(--accent);letter-spacing:.3px;}
+  .dayoff-remove{font:inherit;font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--border-strong);border-radius:8px;padding:5px 10px;cursor:pointer;margin-left:auto;}
   .day-status{font-size:13px;color:var(--text-muted);padding:8px 0;}
   .day-status.free-label{color:var(--free-neon);font-weight:700;}
 
@@ -242,6 +250,11 @@
   const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
   const DOW = ["ВС","ПН","ВТ","СР","ЧТ","ПТ","СБ"];
   const SOURCE_SUFFIX = {VK:"ВК",TG:"Т",WA:"W",MAX:"М"};
+  // "Выходной" (day off) is stored as an ordinary booking row via master_upsert_booking with
+  // source / client_name / start_time all set to DAY_OFF. The public availability RPC then shows the
+  // day as busy automatically, and the secretary RPC exposes start_time, so the wife sees "Выходной".
+  const DAY_OFF = 'Выходной';
+  function isDayOff(b){ return !!b && (b.source === DAY_OFF || b.start_time === DAY_OFF); }
 
   let masterPin = localStorage.getItem('voodoo_pin') || null;
   let secretaryPin = localStorage.getItem('voodoo_sec_pin') || null;
@@ -337,14 +350,16 @@
     if (mode !== 'master' || masterView === 'contacts'){ summaryEl.hidden = true; return; }
     summaryEl.hidden = false;
     const monthBookings = bookings.filter(b => b.booking_date.slice(0,7) === `${activeYear}-${pad(activeMonth)}`);
-    const clientBookings = monthBookings.filter(b => !b.is_personal);
+    const clientBookings = monthBookings.filter(b => !b.is_personal && !isDayOff(b));
     const total = clientBookings.reduce((s,b) => s + (Number(b.price)||0), 0);
-    const bookedDays = new Set(monthBookings.map(b => b.booking_date)).size;
+    const bookedDays = new Set(monthBookings.filter(b => !isDayOff(b)).map(b => b.booking_date)).size;
+    const daysOff = new Set(monthBookings.filter(isDayOff).map(b => b.booking_date)).size;
     const nDays = daysInMonth(activeYear, activeMonth);
     const avgSession = clientBookings.length ? total/clientBookings.length : 0;
     const avgDay = total / nDays;
     summaryEl.innerHTML = `
       <div class="stat"><span>Занято дней</span><b>${bookedDays} из ${nDays}</b></div>
+      <div class="stat"><span>Выходных</span><b>${daysOff}</b></div>
       <div class="stat"><span>Сеансов</span><b>${clientBookings.length}</b></div>
       <div class="stat"><span>Сумма по записям</span><b>${fmtMoney(total)}</b></div>
       <div class="stat"><span>Средний чек</span><b>${fmtMoney(avgSession)}</b></div>
@@ -387,14 +402,21 @@
         busy = busyDates.has(ds);
       }
 
+      const offEntry = mode==='master' ? dayEntries.find(isDayOff) : (mode==='secretary' ? dayEntries.find(r => r.start_time === DAY_OFF) : null);
+      if (offEntry) dayEntries = dayEntries.filter(e => e !== offEntry);
+
       const row = document.createElement('div');
-      row.className = 'day-row' + (weekend?' weekend':'') + (isToday(activeYear,activeMonth,d)?' today':'') + (!busy?' free':'');
+      row.className = 'day-row' + (weekend?' weekend':'') + (isToday(activeYear,activeMonth,d)?' today':'') + (!busy?' free':'') + (offEntry?' dayoff':'');
 
       let inner = `<div class="day-date"><span class="day-num">${d}</span><span class="day-dow">${DOW[dow]}</span></div>`;
 
-      if (mode==='master'){
+      if (mode==='master' && offEntry){
+        inner += `<div class="day-entries"><div class="dayoff-line"><span class="dayoff-label">🌙 Выходной</span><button class="dayoff-remove" onclick="removeDayOff('${offEntry.id}')">Убрать выходной</button></div>` +
+          dayEntries.map(b => `<div class="entry${b.is_personal?' entry-personal':''}"${b.is_personal?'':` onclick="openEntryModal('${b.id}', null)"`}><div class="entry-main"><span class="entry-time">${b.start_time||''}</span><span class="entry-client">${b.is_personal?'🏠 ':''}${escapeHtml(b.client_name||'')}</span></div></div>`).join('') +
+          `</div>`;
+      } else if (mode==='master'){
         if (dayEntries.length===0){
-          inner += `<button class="day-empty-btn" onclick="openEntryModal(null,'${ds}')">Свободно <span>+</span></button>`;
+          inner += `<div class="day-free-actions"><button class="day-empty-btn" onclick="openEntryModal(null,'${ds}')">Свободно <span>+</span></button><button class="day-off-btn" onclick="setDayOff('${ds}')">🌙 Выходной</button></div>`;
         } else {
           inner += '<div class="day-entries">' + dayEntries.map(b => {
             if (b.is_personal){
@@ -419,6 +441,12 @@
             </div>`;
           }).join('') + `<button class="day-add-btn" onclick="openEntryModal(null,'${ds}')">+ Добавить запись</button></div>`;
         }
+      } else if (mode==='secretary' && offEntry){
+        inner += `<div class="day-entries"><div class="dayoff-line"><span class="dayoff-label">🌙 Выходной</span></div>` +
+          dayEntries.map(r => r.is_personal
+            ? `<div class="entry entry-personal" onclick="openSecModal('${r.id}', null)"><div class="entry-main"><span class="entry-time">${r.start_time||''}</span><span class="entry-client">🏠 ${escapeHtml(r.title||'Личное')}</span></div></div>`
+            : `<div class="entry-readonly"><span class="entry-time">${r.start_time||''}</span> занято</div>`).join('') +
+          `<button class="day-add-btn" onclick="openSecModal(null,'${ds}')">+ Добавить</button></div>`;
       } else if (mode==='secretary'){
         if (dayEntries.length===0){
           inner += `<button class="day-empty-btn" onclick="openSecModal(null,'${ds}')">Свободно <span>+</span></button>`;
@@ -625,7 +653,7 @@
 
   function computeContacts(){
     const map = new Map();
-    bookings.filter(b => !b.is_personal).forEach(b => {
+    bookings.filter(b => !b.is_personal && !isDayOff(b)).forEach(b => {
       const phone = (b.phone||'').trim();
       const nameKey = normalizeRu(b.client_name||'').trim();
       if (!phone && !nameKey) return;
@@ -854,6 +882,29 @@
     } catch(e){ showToast('Ошибка удаления: ' + e.message); }
   }
 
+  async function setDayOff(ds){
+    if (bookings.some(b => b.booking_date === ds && isDayOff(b))){ showToast('Этот день уже выходной'); return; }
+    try {
+      await rpc('master_upsert_booking', {
+        p_pin: masterPin, p_id: null, p_booking_date: ds, p_start_time: DAY_OFF,
+        p_client_name: DAY_OFF, p_phone: null, p_source: DAY_OFF,
+        p_service: null, p_price: 0, p_status: 'booked', p_notes: null
+      });
+      await loadMaster();
+      renderAll();
+      showToast('Выходной отмечен — для клиентов день занят');
+    } catch(e){ showToast('Ошибка: ' + e.message); }
+  }
+
+  async function removeDayOff(id){
+    try {
+      await rpc('master_delete_booking', {p_pin: masterPin, p_id: id});
+      await loadMaster();
+      renderAll();
+      showToast('Выходной убран — день снова свободен');
+    } catch(e){ showToast('Ошибка: ' + e.message); }
+  }
+
   function openSecModal(id, prefillDate){
     secEditingId = id || null;
     const entry = id ? secRows.find(r => r.id === id) : null;
@@ -968,7 +1019,7 @@
     if (!nameGuess) return [];
     const needle = normalizeRu(nameGuess);
     const stem = needle.slice(0, Math.max(3, needle.length - 2));
-    let matches = bookings.filter(b => !b.is_personal && b.status !== 'cancelled' && normalizeRu(b.client_name).startsWith(stem));
+    let matches = bookings.filter(b => !b.is_personal && !isDayOff(b) && b.status !== 'cancelled' && normalizeRu(b.client_name).startsWith(stem));
     if (dateGuess){
       const byDate = matches.filter(b => b.booking_date === dateGuess);
       if (byDate.length) matches = byDate;
